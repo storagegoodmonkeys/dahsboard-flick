@@ -153,6 +153,13 @@ export default function UsersPage() {
       ),
     },
     {
+      key: 'gender',
+      label: 'Gender',
+      render: (user: User) => (
+        <span className="text-muted-foreground text-xs capitalize">{user.gender || '—'}</span>
+      ),
+    },
+    {
       key: 'user_status',
       label: 'Status',
       render: (user: User) => <StatusBadge status={user.user_status} />,
