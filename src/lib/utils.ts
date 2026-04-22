@@ -51,3 +51,16 @@ export function getPercentageChange(current: number, previous: number): number {
   if (previous === 0) return current > 0 ? 100 : 0;
   return Math.round(((current - previous) / previous) * 100);
 }
+
+export function formatFullTimestamp(date: string | Date, tz = 'Europe/Istanbul'): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: tz,
+  }).format(new Date(date));
+}

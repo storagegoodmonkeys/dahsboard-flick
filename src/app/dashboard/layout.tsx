@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Sidebar } from '@/components/sidebar';
+import { ToastProvider } from '@/components/toast-provider';
 
 export default function DashboardLayout({
   children,
@@ -72,9 +73,11 @@ export default function DashboardLayout({
   if (!authenticated) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <main className="ml-[250px] min-h-screen">{children}</main>
-    </div>
+    <ToastProvider>
+      <div className="min-h-screen bg-background">
+        <Sidebar />
+        <main className="ml-[250px] min-h-screen">{children}</main>
+      </div>
+    </ToastProvider>
   );
 }

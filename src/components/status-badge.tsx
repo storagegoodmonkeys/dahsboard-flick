@@ -40,7 +40,8 @@ export function StatusBadge({
   status: string;
   className?: string;
 }) {
-  const style = statusStyles[status] || 'bg-muted text-muted-foreground border-muted-foreground/20';
+  const safeStatus = status || 'unknown';
+  const style = statusStyles[safeStatus] || 'bg-muted text-muted-foreground border-muted-foreground/20';
 
   return (
     <span
@@ -50,7 +51,7 @@ export function StatusBadge({
         className
       )}
     >
-      {status.replace(/_/g, ' ')}
+      {safeStatus.replace(/_/g, ' ')}
     </span>
   );
 }

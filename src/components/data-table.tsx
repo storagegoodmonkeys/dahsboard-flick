@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Inbox } from 'lucide-react';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -11,12 +12,20 @@ interface Column {
   className?: string;
 }
 
+interface ActionButton {
+  label: string;
+  icon?: React.ReactNode;
+  onClick: (item: any) => void;
+  variant?: 'default' | 'destructive';
+}
+
 interface DataTableProps {
   columns: Column[];
   data: any[];
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (item: any) => void;
+  actions?: ActionButton[];
 }
 
 export function DataTable({
@@ -25,7 +34,12 @@ export function DataTable({
   loading = false,
   emptyMessage = 'No data found',
   onRowClick,
+  actions,
 }: DataTableProps) {
+  const allColumns = actions
+    ? [...columns, { key: '_actions', label: '', className: 'w-1' }]
+    : columns;
+
   if (loading) {
     return (
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
@@ -43,7 +57,7 @@ export function DataTable({
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              {columns.map((col) => (
+              {allColumns.map((col) => (
                 <th
                   key={col.key}
                   className={cn(
@@ -60,12 +74,12 @@ export function DataTable({
             {data.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={allColumns.length}
                   className="text-center text-sm text-muted-foreground py-16"
                 >
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                      <span className="text-lg">?</span>
+                      <Inbox className="w-5 h-5 text-muted-foreground/60" />
                     </div>
                     {emptyMessage}
                   </div>
@@ -88,6 +102,30 @@ export function DataTable({
                         : (item[col.key] as React.ReactNode) ?? '-'}
                     </td>
                   ))}
+                  {actions && (
+                    <td className="px-5 py-3.5 text-sm">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        {actions.map((action, j) => (
+                          <button
+                            key={j}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              action.onClick(item);
+                            }}
+                            className={cn(
+                              'px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5',
+                              action.variant === 'destructive'
+                                ? 'text-destructive hover:bg-destructive/10'
+                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                            )}
+                          >
+                            {action.icon}
+                            {action.label}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

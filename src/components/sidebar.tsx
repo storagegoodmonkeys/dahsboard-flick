@@ -1,17 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
   Flame,
+  QrCode,
   Search,
   Shield,
+  Bug,
+  MessageSquare,
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -22,7 +25,9 @@ const navItems = [
   { href: '/dashboard/users', label: 'Users', icon: Users },
   { href: '/dashboard/lighters', label: 'Lighters', icon: Flame },
   { href: '/dashboard/lost-found', label: 'Lost & Found', icon: Search },
-  { href: '/dashboard/moderation', label: 'Moderation', icon: Shield },
+  { href: '/dashboard/moderation', label: 'Reports', icon: Shield },
+  { href: '/dashboard/report-problems', label: 'Report Problems', icon: Bug },
+  { href: '/dashboard/support-messages', label: 'Support Messages', icon: MessageSquare },
 ];
 
 export function Sidebar() {
@@ -97,6 +102,25 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* QR Board Link */}
+      <div className="px-3 mb-1">
+        <a
+          href="https://qr.goodmonkeys.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] font-medium text-muted-foreground hover:text-foreground hover:bg-sidebar-hover transition-all"
+          title={collapsed ? 'QR Board' : undefined}
+        >
+          <QrCode className="w-[18px] h-[18px] shrink-0" />
+          {!collapsed && (
+            <>
+              <span className="flex-1">QR Board</span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </>
+          )}
+        </a>
+      </div>
 
       {/* Bottom */}
       <div className="p-3 border-t border-sidebar-border space-y-0.5">

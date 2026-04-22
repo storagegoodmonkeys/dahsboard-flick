@@ -30,6 +30,8 @@
   --ring: #FDD835;
   --gradient-red: #D32F2F;
   --gradient-orange: #FF6B35;
+  --pink: #FF6B9D;
+  --pink-glow: rgba(255, 107, 157, 0.15);
 }
 
 @theme inline {
@@ -61,6 +63,10 @@
   --color-ring: var(--ring);
   --color-gradient-red: var(--gradient-red);
   --color-gradient-orange: var(--gradient-orange);
+  --color-pink: var(--pink);
+  --color-pink-glow: var(--pink-glow);
+  --color-pink: var(--pink);
+  --color-pink-glow: var(--pink-glow);
   --font-sans: 'Inter', sans-serif;
   --font-mono: var(--font-geist-mono);
 }
@@ -140,4 +146,25 @@ body {
   background: linear-gradient(135deg, rgba(253, 216, 53, 0.15), transparent 50%, rgba(211, 47, 47, 0.1));
   z-index: -1;
   pointer-events: none;
+}
+
+/* Toast slide-in animation */
+@keyframes slide-in-from-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-in.slide-in-from-right {
+  animation: slide-in-from-right 0.25s ease-out;
+}
+
+/* Focus-visible ring for accessibility */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth transitions on all interactive elements */
+button, a, select, input, textarea {
+  transition: all 0.15s ease;
 }

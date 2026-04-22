@@ -1,7 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown, Minus, type LucideIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ArrowRight, type LucideIcon } from 'lucide-react';
 
 interface StatCardProps {
   title: string;
@@ -11,6 +12,7 @@ interface StatCardProps {
   icon: LucideIcon;
   color?: 'accent' | 'success' | 'info' | 'destructive' | 'warning';
   loading?: boolean;
+  href?: string;
 }
 
 const colorMap = {
@@ -54,37 +56,44 @@ export function StatCard({
   icon: Icon,
   color = 'accent',
   loading = false,
+  href,
 }: StatCardProps) {
   const colors = colorMap[color];
 
-  return (
+  const content = (
     <div className={cn(
       'bg-card rounded-2xl border border-border p-5 hover:bg-card-hover transition-all duration-300 group card-shine',
-      colors.glow
+      colors.glow,
+      href && 'cursor-pointer'
     )}>
       <div className="flex items-start justify-between mb-4">
         <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center', colors.bg)}>
           <Icon className={cn('w-5 h-5', colors.text)} />
         </div>
-        {change !== undefined && (
-          <div
-            className={cn(
-              'flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full',
-              change > 0 && 'text-success bg-success/10',
-              change < 0 && 'text-destructive bg-destructive/10',
-              change === 0 && 'text-muted-foreground bg-muted'
-            )}
-          >
-            {change > 0 ? (
-              <TrendingUp className="w-3 h-3" />
-            ) : change < 0 ? (
-              <TrendingDown className="w-3 h-3" />
-            ) : (
-              <Minus className="w-3 h-3" />
-            )}
-            {Math.abs(change)}%
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {change !== undefined && (
+            <div
+              className={cn(
+                'flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-full',
+                change > 0 && 'text-success bg-success/10',
+                change < 0 && 'text-destructive bg-destructive/10',
+                change === 0 && 'text-muted-foreground bg-muted'
+              )}
+            >
+              {change > 0 ? (
+                <TrendingUp className="w-3 h-3" />
+              ) : change < 0 ? (
+                <TrendingDown className="w-3 h-3" />
+              ) : (
+                <Minus className="w-3 h-3" />
+              )}
+              {Math.abs(change)}%
+            </div>
+          )}
+          {href && (
+            <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+          )}
+        </div>
       </div>
       <p className="text-[28px] font-bold text-foreground tracking-tight mb-1">
         {loading ? (
@@ -101,4 +110,10 @@ export function StatCard({
       </p>
     </div>
   );
+
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
+
+  return content;
 }
