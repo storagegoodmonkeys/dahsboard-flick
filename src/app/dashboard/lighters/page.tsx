@@ -23,6 +23,9 @@ import {
   Eye,
   Trash2,
   Image as ImageIcon,
+  XCircle,
+  CircleOff,
+  CalendarDays,
 } from 'lucide-react';
 
 interface Lighter {
@@ -51,6 +54,38 @@ const STATUS_MAP: Record<number, string> = {
 };
 
 const PAGE_SIZE = 20;
+
+function getDatePresetRange(preset: string): { from: string; to: string } {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const today = fmt(now);
+
+  switch (preset) {
+    case 'today': {
+      return { from: today, to: today };
+    }
+    case 'last_week': {
+      const start = new Date(now); start.setDate(start.getDate() - 7);
+      return { from: fmt(start), to: today };
+    }
+    case 'this_month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: fmt(start), to: today };
+    }
+    case 'last_month': {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: fmt(start), to: fmt(end) };
+    }
+    case 'last_year': {
+      const start = new Date(now.getFullYear() - 1, 0, 1);
+      const end = new Date(now.getFullYear() - 1, 11, 31);
+      return { from: fmt(start), to: fmt(end) };
+    }
+    default:
+      return { from: '', to: '' };
+  }
+}
 
 export default function LightersPage() {
   const searchParams = useSearchParams();
@@ -81,11 +116,18 @@ export default function LightersPage() {
 
   const toast = useToast();
 
+  // Date range filter
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState('');
+
   // Stats
   const [totalLighters, setTotalLighters] = useState(0);
   const [registeredCount, setRegisteredCount] = useState(0);
   const [lostCount, setLostCount] = useState(0);
   const [foundCount, setFoundCount] = useState(0);
+  const [discardedCount, setDiscardedCount] = useState(0);
+  const [unregisteredCount, setUnregisteredCount] = useState(0);
 
   const fetchLighters = useCallback(async () => {
     setLoading(true);
@@ -104,6 +146,14 @@ export default function LightersPage() {
     }
     if (searchQuery) {
       query = query.or(`nickname.ilike.%${searchQuery}%,qr_code.ilike.%${searchQuery}%,model_name.ilike.%${searchQuery}%`);
+    }
+    if (dateFrom) {
+      query = query.gte('created_at', new Date(dateFrom).toISOString());
+    }
+    if (dateTo) {
+      const endDate = new Date(dateTo);
+      endDate.setHours(23, 59, 59, 999);
+      query = query.lte('created_at', endDate.toISOString());
     }
 
     // Filter by user_id (from user modal link)
@@ -151,19 +201,23 @@ export default function LightersPage() {
     setLighters(lightersList);
     setTotalCount(count || 0);
     setLoading(false);
-  }, [page, statusFilter, searchQuery, searchParams]);
+  }, [page, statusFilter, searchQuery, searchParams, dateFrom, dateTo]);
 
   const fetchStats = async () => {
-    const [total, registered, lost, found] = await Promise.all([
+    const [total, registered, lost, found, discarded, unregistered] = await Promise.all([
       supabase.from('lighters').select('*', { count: 'exact', head: true }),
       supabase.from('lighters').select('*', { count: 'exact', head: true }).eq('lighter_status', 1),
       supabase.from('lighters').select('*', { count: 'exact', head: true }).eq('lighter_status', 2),
       supabase.from('lighters').select('*', { count: 'exact', head: true }).eq('lighter_status', 4),
+      supabase.from('lighters').select('*', { count: 'exact', head: true }).eq('lighter_status', 3),
+      supabase.from('lighters').select('*', { count: 'exact', head: true }).eq('lighter_status', 0),
     ]);
     setTotalLighters(total.count || 0);
     setRegisteredCount(registered.count || 0);
     setLostCount(lost.count || 0);
     setFoundCount(found.count || 0);
+    setDiscardedCount(discarded.count || 0);
+    setUnregisteredCount(unregistered.count || 0);
   };
 
   const fetchLighterDetail = async (lighter: Lighter) => {
@@ -316,15 +370,17 @@ export default function LightersPage() {
       <Header title="Lighters" />
       <div className="p-6 space-y-6">
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <StatCard title="Total Lighters" value={formatNumber(totalLighters)} icon={Flame} color="warning" />
           <StatCard title="Registered" value={formatNumber(registeredCount)} icon={QrCode} color="success" />
+          <StatCard title="Unregistered" value={formatNumber(unregisteredCount)} icon={CircleOff} color="muted" />
           <StatCard title="Currently Lost" value={formatNumber(lostCount)} icon={MapPin} color="destructive" />
-          <StatCard title="Lighters Found" value={formatNumber(foundCount)} icon={Eye} color="info" />
+          <StatCard title="Found" value={formatNumber(foundCount)} icon={Eye} color="info" />
+          <StatCard title="Discarded" value={formatNumber(discardedCount)} icon={XCircle} color="muted" />
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -349,6 +405,71 @@ export default function LightersPage() {
           </select>
         </div>
 
+        {/* Date Range Filter */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <select
+            value={datePreset}
+            onChange={(e) => {
+              const val = e.target.value;
+              setDatePreset(val);
+              if (val) {
+                const range = getDatePresetRange(val);
+                setDateFrom(range.from);
+                setDateTo(range.to);
+              } else {
+                setDateFrom('');
+                setDateTo('');
+              }
+              setPage(0);
+            }}
+            className="px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="last_week">Last Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="last_year">Last Year</option>
+          </select>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setDatePreset(''); setPage(0); }}
+              className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+            />
+            <span className="text-muted-foreground text-xs">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setDatePreset(''); setPage(0); }}
+              className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(''); setPage(0); }}
+                className="px-2 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Date range summary */}
+        {(dateFrom || dateTo) && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-accent/5 border border-accent/10 rounded-lg">
+            <CalendarDays className="w-4 h-4 text-accent" />
+            <span className="text-sm text-foreground font-medium">
+              {totalCount} lighter{totalCount !== 1 ? 's' : ''} found
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {dateFrom && dateTo ? `from ${dateFrom} to ${dateTo}` : dateFrom ? `from ${dateFrom}` : `until ${dateTo}`}
+            </span>
+          </div>
+        )}
+
         {/* Table */}
         <DataTable
           columns={columns}
@@ -357,7 +478,7 @@ export default function LightersPage() {
           emptyMessage="No lighters found"
           onRowClick={(item) => fetchLighterDetail(item as unknown as Lighter)}
           actions={[
-            { label: 'View', icon: 'view', onClick: (item: Lighter) => fetchLighterDetail(item) },
+            { label: 'View', icon: <Eye className="w-3.5 h-3.5" />, onClick: (item: Lighter) => fetchLighterDetail(item) },
           ]}
         />
 

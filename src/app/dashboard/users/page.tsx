@@ -30,6 +30,7 @@ import {
   Trash2,
   Ban,
   AlertTriangle,
+  CalendarDays,
 } from 'lucide-react';
 
 interface User {
@@ -78,6 +79,38 @@ interface UserBlock {
 
 const PAGE_SIZE = 20;
 
+function getDatePresetRange(preset: string): { from: string; to: string } {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const today = fmt(now);
+
+  switch (preset) {
+    case 'today': {
+      return { from: today, to: today };
+    }
+    case 'last_week': {
+      const start = new Date(now); start.setDate(start.getDate() - 7);
+      return { from: fmt(start), to: today };
+    }
+    case 'this_month': {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { from: fmt(start), to: today };
+    }
+    case 'last_month': {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: fmt(start), to: fmt(end) };
+    }
+    case 'last_year': {
+      const start = new Date(now.getFullYear() - 1, 0, 1);
+      const end = new Date(now.getFullYear() - 1, 11, 31);
+      return { from: fmt(start), to: fmt(end) };
+    }
+    default:
+      return { from: '', to: '' };
+  }
+}
+
 function isValidLoginDate(date: string | null): boolean {
   if (!date) return false;
   const d = new Date(date);
@@ -103,9 +136,13 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState(false);
   const [userReports, setUserReports] = useState<UserReport[]>([]);
   const [userBlocks, setUserBlocks] = useState<UserBlock[]>([]);
+  const [authSignInMap, setAuthSignInMap] = useState<Record<string, string | null>>({});
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [datePreset, setDatePreset] = useState('');
 
   // New user form
-  const [newUser, setNewUser] = useState({ full_name: '', email: '', password: '', username: '', user_level: 'user' });
+  const [newUser, setNewUser] = useState({ first_name: '', last_name: '', email: '', password: '', username: '', user_level: 'user' });
   const [creating, setCreating] = useState(false);
 
   // Stats
@@ -147,19 +184,29 @@ export default function UsersPage() {
     if (searchQuery) {
       query = query.or(`full_name.ilike.%${searchQuery}%,username.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
     }
+    // Date filters: URL params take priority, then manual date range
     if (filter === 'today') {
       const today = new Date(); today.setHours(0, 0, 0, 0);
       query = query.gte('created_at', today.toISOString());
     } else if (filter === 'week') {
       const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
       query = query.gte('created_at', weekAgo.toISOString());
+    } else {
+      if (dateFrom) {
+        query = query.gte('created_at', new Date(dateFrom).toISOString());
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', endDate.toISOString());
+      }
     }
 
     const { data, count } = await query;
     setUsers((data as User[]) || []);
     setTotalCount(count || 0);
     setLoading(false);
-  }, [page, statusFilter, searchQuery, searchParams]);
+  }, [page, statusFilter, searchQuery, searchParams, dateFrom, dateTo]);
 
   const fetchStats = useCallback(async () => {
     const [total, active, suspended, admin] = await Promise.all([
@@ -239,16 +286,23 @@ export default function UsersPage() {
   };
 
   const handleCreateUser = async () => {
-    if (!newUser.full_name || !newUser.email || !newUser.password) {
+    if (!newUser.first_name || !newUser.email || !newUser.password) {
       toast.error('Please fill in all required fields');
       return;
     }
     setCreating(true);
     try {
+      const payload = {
+        full_name: `${newUser.first_name} ${newUser.last_name}`.trim(),
+        email: newUser.email,
+        password: newUser.password,
+        username: newUser.username,
+        user_level: newUser.user_level,
+      };
       const res = await fetch('/api/admin/users/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (data.error) {
@@ -256,7 +310,7 @@ export default function UsersPage() {
       } else {
         toast.success('User created successfully');
         setShowNewUser(false);
-        setNewUser({ full_name: '', email: '', password: '', username: '', user_level: 'user' });
+        setNewUser({ first_name: '', last_name: '', email: '', password: '', username: '', user_level: 'user' });
         fetchUsers();
         fetchStats();
       }
@@ -291,8 +345,17 @@ export default function UsersPage() {
     setDeleteTarget(null);
   };
 
+  const fetchAuthInfo = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/auth-info');
+      const data = await res.json();
+      if (!data.error) setAuthSignInMap(data);
+    } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => { fetchStats(); }, [fetchStats]);
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { fetchAuthInfo(); }, [fetchAuthInfo]);
 
   const columns = [
     {
@@ -355,11 +418,15 @@ export default function UsersPage() {
     {
       key: 'last_login_at',
       label: 'Last Active',
-      render: (user: User) => (
-        <span className="text-muted-foreground text-xs">
-          {isValidLoginDate(user.last_login_at) ? timeAgo(user.last_login_at) : 'Never'}
-        </span>
-      ),
+      render: (user: User) => {
+        const authDate = authSignInMap[user.uuid];
+        const loginDate = isValidLoginDate(user.last_login_at) ? user.last_login_at : authDate;
+        return (
+          <span className="text-muted-foreground text-xs">
+            {isValidLoginDate(loginDate) ? timeAgo(loginDate!) : '-'}
+          </span>
+        );
+      },
     },
   ];
 
@@ -379,7 +446,7 @@ export default function UsersPage() {
         </div>
 
         {/* Filters + New User */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -410,6 +477,71 @@ export default function UsersPage() {
           </button>
         </div>
 
+        {/* Date Range Filter */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <select
+            value={datePreset}
+            onChange={(e) => {
+              const val = e.target.value;
+              setDatePreset(val);
+              if (val) {
+                const range = getDatePresetRange(val);
+                setDateFrom(range.from);
+                setDateTo(range.to);
+              } else {
+                setDateFrom('');
+                setDateTo('');
+              }
+              setPage(0);
+            }}
+            className="px-4 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+          >
+            <option value="">All Time</option>
+            <option value="today">Today</option>
+            <option value="last_week">Last Week</option>
+            <option value="this_month">This Month</option>
+            <option value="last_month">Last Month</option>
+            <option value="last_year">Last Year</option>
+          </select>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setDatePreset(''); setPage(0); }}
+              className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+            />
+            <span className="text-muted-foreground text-xs">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setDatePreset(''); setPage(0); }}
+              className="px-3 py-2 bg-card border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset(''); setPage(0); }}
+                className="px-2 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Date range summary */}
+        {(dateFrom || dateTo) && (
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-accent/5 border border-accent/10 rounded-lg">
+            <CalendarDays className="w-4 h-4 text-accent" />
+            <span className="text-sm text-foreground font-medium">
+              {totalCount} user{totalCount !== 1 ? 's' : ''} found
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {dateFrom && dateTo ? `from ${dateFrom} to ${dateTo}` : dateFrom ? `from ${dateFrom}` : `until ${dateTo}`}
+            </span>
+          </div>
+        )}
+
         {/* Table */}
         <DataTable
           columns={columns}
@@ -418,7 +550,7 @@ export default function UsersPage() {
           emptyMessage="No users found"
           onRowClick={(item) => fetchUserDetail(item as unknown as User)}
           actions={[
-            { label: 'Edit', icon: 'edit', onClick: (item: User) => fetchUserDetail(item) },
+            { label: 'Edit', icon: <Pencil className="w-3.5 h-3.5" />, onClick: (item: User) => fetchUserDetail(item) },
           ]}
         />
 
@@ -545,7 +677,11 @@ export default function UsersPage() {
               <div className="flex justify-between py-2 border-b border-border/50">
                 <span className="text-muted-foreground">Last Login</span>
                 <span className="text-foreground">
-                  {isValidLoginDate(selectedUser.last_login_at) ? timeAgo(selectedUser.last_login_at) : 'Never'}
+                  {(() => {
+                    const authDate = authSignInMap[selectedUser.uuid];
+                    const loginDate = isValidLoginDate(selectedUser.last_login_at) ? selectedUser.last_login_at : authDate;
+                    return isValidLoginDate(loginDate) ? timeAgo(loginDate!) : '-';
+                  })()}
                 </span>
               </div>
               <div className="flex justify-between py-2 border-b border-border/50">
@@ -632,9 +768,15 @@ export default function UsersPage() {
       {/* New User Modal */}
       <Modal open={showNewUser} onClose={() => setShowNewUser(false)} title="Create New User" subtitle="Add a new user to the platform">
         <div className="space-y-4">
-          <div>
-            <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Full Name *</label>
-            <input type="text" value={newUser.full_name} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })} className={inputClass} placeholder="John Doe" />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">First Name *</label>
+              <input type="text" value={newUser.first_name} onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })} className={inputClass} placeholder="John" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Last Name</label>
+              <input type="text" value={newUser.last_name} onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })} className={inputClass} placeholder="Doe" />
+            </div>
           </div>
           <div>
             <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Email *</label>

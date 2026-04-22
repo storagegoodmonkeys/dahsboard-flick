@@ -26,8 +26,10 @@ export function UserEditForm({ user, onSave, onClose }: UserEditFormProps) {
   const [saving, setSaving] = useState(false);
   const [removingPhoto, setRemovingPhoto] = useState(false);
   const [photoRemoved, setPhotoRemoved] = useState(false);
+  const nameParts = (user.full_name || '').trim().split(/\s+/);
   const [form, setForm] = useState({
-    full_name: user.full_name || '',
+    first_name: nameParts[0] || '',
+    last_name: nameParts.slice(1).join(' ') || '',
     username: user.username || '',
     email: user.email || '',
     gender: user.gender || '',
@@ -42,7 +44,7 @@ export function UserEditForm({ user, onSave, onClose }: UserEditFormProps) {
     const { error } = await supabase
       .from('users')
       .update({
-        full_name: form.full_name,
+        full_name: `${form.first_name} ${form.last_name}`.trim(),
         username: form.username,
         email: form.email,
         gender: form.gender,
@@ -55,7 +57,7 @@ export function UserEditForm({ user, onSave, onClose }: UserEditFormProps) {
     if (error) {
       toast.error('Failed to save', error.message);
     } else {
-      toast.success('User updated', `${form.full_name} has been updated successfully.`);
+      toast.success('User updated', `${form.first_name} ${form.last_name} has been updated successfully.`);
       onSave();
     }
     setSaving(false);
@@ -113,23 +115,33 @@ export function UserEditForm({ user, onSave, onClose }: UserEditFormProps) {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className={labelClass}>Full Name</label>
+          <label className={labelClass}>First Name</label>
           <input
             type="text"
-            value={form.full_name}
-            onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+            value={form.first_name}
+            onChange={(e) => setForm({ ...form, first_name: e.target.value })}
             className={inputClass}
           />
         </div>
         <div>
-          <label className={labelClass}>Username</label>
+          <label className={labelClass}>Last Name</label>
           <input
             type="text"
-            value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            value={form.last_name}
+            onChange={(e) => setForm({ ...form, last_name: e.target.value })}
             className={inputClass}
           />
         </div>
+      </div>
+
+      <div>
+        <label className={labelClass}>Username</label>
+        <input
+          type="text"
+          value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value })}
+          className={inputClass}
+        />
       </div>
 
       <div>

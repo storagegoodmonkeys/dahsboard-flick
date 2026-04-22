@@ -113,10 +113,10 @@ export function DataTable({
                               action.onClick(item);
                             }}
                             className={cn(
-                              'px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5',
+                              'px-3.5 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 min-w-[60px] justify-center',
                               action.variant === 'destructive'
                                 ? 'text-destructive hover:bg-destructive/10'
-                                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                                : 'text-accent bg-accent/10 hover:bg-accent/20'
                             )}
                           >
                             {action.icon}

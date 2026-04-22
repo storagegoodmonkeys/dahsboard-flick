@@ -10,7 +10,7 @@ interface StatCardProps {
   change?: number;
   changeLabel?: string;
   icon: LucideIcon;
-  color?: 'accent' | 'success' | 'info' | 'destructive' | 'warning';
+  color?: 'accent' | 'success' | 'info' | 'destructive' | 'warning' | 'muted';
   loading?: boolean;
   href?: string;
 }
@@ -45,6 +45,12 @@ const colorMap = {
     text: 'text-warning',
     glow: 'shadow-[0_0_15px_rgba(255,107,53,0.08)]',
     border: 'border-warning/10',
+  },
+  muted: {
+    bg: 'bg-muted',
+    text: 'text-muted-foreground',
+    glow: '',
+    border: 'border-border',
   },
 };
 
