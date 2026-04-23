@@ -11,9 +11,12 @@ export async function GET() {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const map: Record<string, string | null> = {};
+    const map: Record<string, { last_sign_in_at: string | null; email_confirmed_at: string | null }> = {};
     (data?.users || []).forEach((u) => {
-      map[u.id] = u.last_sign_in_at || null;
+      map[u.id] = {
+        last_sign_in_at: u.last_sign_in_at || null,
+        email_confirmed_at: u.email_confirmed_at || null,
+      };
     });
 
     return NextResponse.json(map);

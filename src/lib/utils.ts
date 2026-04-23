@@ -64,3 +64,34 @@ export function formatFullTimestamp(date: string | Date, tz = 'Europe/Istanbul')
     timeZone: tz,
   }).format(new Date(date));
 }
+
+/**
+ * Humanize a database enum value: "prefer_not_to_say" → "Prefer not to say"
+ */
+export function formatEnum(value?: string | null): string {
+  if (!value) return '-';
+  const normalized = value.replace(/_/g, ' ').toLowerCase();
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+/**
+ * Extract up to 2 initials from a display name.
+ */
+export function getInitials(name?: string | null, fallback = '?'): string {
+  if (!name) return fallback;
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return fallback;
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * Deterministic hue from a string (0–360) — used for avatar gradient fallbacks.
+ */
+export function hashHue(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % 360;
+}

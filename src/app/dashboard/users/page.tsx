@@ -13,7 +13,9 @@ import { ImageLightbox } from '@/components/image-lightbox';
 import { UserEditForm } from '@/components/user-edit-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { supabase } from '@/lib/supabase';
-import { formatNumber, formatDate, formatFullTimestamp, timeAgo } from '@/lib/utils';
+import { formatNumber, formatDate, formatFullTimestamp, timeAgo, formatEnum } from '@/lib/utils';
+import { Avatar } from '@/components/avatar';
+import { UserStatusPill } from '@/components/user-status-pill';
 import { useToast } from '@/components/toast-provider';
 import {
   Users,
@@ -22,7 +24,6 @@ import {
   Shield,
   Search,
   Flame,
-  FileText,
   Heart,
   Star,
   Plus,
@@ -53,7 +54,6 @@ interface UserDetail extends User {
   bio: string;
   date_of_birth: string;
   lightersOwned: number;
-  postsCount: number;
   friendsCount: number;
 }
 
@@ -78,6 +78,15 @@ interface UserBlock {
 }
 
 const PAGE_SIZE = 20;
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <span className="text-muted-foreground text-xs font-medium shrink-0">{label}</span>
+      <div className="text-right min-w-0">{value}</div>
+    </div>
+  );
+}
 
 function getDatePresetRange(preset: string): { from: string; to: string } {
   const now = new Date();
@@ -136,7 +145,7 @@ export default function UsersPage() {
   const [deleting, setDeleting] = useState(false);
   const [userReports, setUserReports] = useState<UserReport[]>([]);
   const [userBlocks, setUserBlocks] = useState<UserBlock[]>([]);
-  const [authSignInMap, setAuthSignInMap] = useState<Record<string, string | null>>({});
+  const [authSignInMap, setAuthSignInMap] = useState<Record<string, { last_sign_in_at: string | null; email_confirmed_at: string | null }>>({});
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [datePreset, setDatePreset] = useState('');
@@ -224,9 +233,8 @@ export default function UsersPage() {
   const fetchUserDetail = async (user: User) => {
     setDetailLoading(true);
     setEditing(false);
-    const [lighters, posts, friends, fullUser, reportsBy, reportsAgainst, blocksBy, blocksOf] = await Promise.all([
+    const [lighters, friends, fullUser, reportsBy, reportsAgainst, blocksBy, blocksOf] = await Promise.all([
       supabase.from('lighter_ownership').select('*', { count: 'exact', head: true }).eq('user_id', user.user_id).eq('is_current_owner', true),
-      supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', user.user_id).is('deleted_at', null),
       supabase.from('friendships').select('*', { count: 'exact', head: true }).or(`user_id.eq.${user.user_id},friend_id.eq.${user.user_id}`).eq('status', 'accepted'),
       supabase.from('users').select('bio, date_of_birth').eq('user_id', user.user_id).single(),
       supabase.from('reports').select('report_id, reporter_id, reported_id, reason, created_at').eq('reporter_id', user.user_id).order('created_at', { ascending: false }).limit(5),
@@ -279,7 +287,6 @@ export default function UsersPage() {
       bio: fullUser.data?.bio || '',
       date_of_birth: fullUser.data?.date_of_birth || '',
       lightersOwned: lighters.count || 0,
-      postsCount: posts.count || 0,
       friendsCount: friends.count || 0,
     });
     setDetailLoading(false);
@@ -368,16 +375,12 @@ export default function UsersPage() {
       label: 'User',
       render: (user: User) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
-            {user.profile_picture_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.profile_picture_url} alt="" className="w-8 h-8 rounded-full object-cover" />
-            ) : (
-              <span className="text-xs font-bold text-accent">
-                {(user.full_name || user.username || '?')[0].toUpperCase()}
-              </span>
-            )}
-          </div>
+          <Avatar
+            src={user.profile_picture_url}
+            name={user.full_name || user.username}
+            seed={user.uuid}
+            size={32}
+          />
           <div>
             <p className="text-foreground font-medium">{user.full_name || 'No name'}</p>
             <p className="text-xs text-muted-foreground">@{user.username || 'unknown'}</p>
@@ -393,7 +396,7 @@ export default function UsersPage() {
     {
       key: 'gender',
       label: 'Gender',
-      render: (user: User) => <span className="text-muted-foreground text-xs capitalize">{user.gender || '-'}</span>,
+      render: (user: User) => <span className="text-muted-foreground text-xs">{formatEnum(user.gender)}</span>,
     },
     {
       key: 'user_status',
@@ -419,7 +422,7 @@ export default function UsersPage() {
       key: 'last_login_at',
       label: 'Last Active',
       render: (user: User) => {
-        const authDate = authSignInMap[user.uuid];
+        const authDate = authSignInMap[user.uuid]?.last_sign_in_at;
         const loginDate = isValidLoginDate(user.last_login_at) ? user.last_login_at : authDate;
         return (
           <span className="text-muted-foreground text-xs">
@@ -565,22 +568,13 @@ export default function UsersPage() {
         title={selectedUser?.full_name || 'User Details'}
         subtitle={selectedUser ? `@${selectedUser.username || 'unknown'}` : ''}
         headerRight={selectedUser && !editing ? (
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setEditing(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
-            >
-              <Pencil className="w-3 h-3" />
-              Edit
-            </button>
-            <button
-              onClick={() => selectedUser && setDeleteTarget(selectedUser)}
-              className="p-1.5 text-destructive/60 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-              title="Delete user"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
+          <button
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </button>
         ) : undefined}
       >
         {detailLoading ? (
@@ -598,105 +592,125 @@ export default function UsersPage() {
             onClose={() => setEditing(false)}
           />
         ) : selectedUser ? (
-          <div className="space-y-4">
-            {/* Profile Photo */}
-            <div className="flex justify-center mb-4">
-              <div
-                className={`w-20 h-20 rounded-full bg-accent/20 flex items-center justify-center ${selectedUser.profile_picture_url ? 'cursor-pointer' : ''}`}
-                onClick={() => selectedUser.profile_picture_url && setShowLightbox(true)}
+          <div className="space-y-5">
+            {/* Avatar */}
+            <div className="flex justify-center pt-1">
+              <Avatar
+                src={selectedUser.profile_picture_url}
+                name={selectedUser.full_name || selectedUser.username}
+                seed={selectedUser.uuid}
+                size={88}
+                ring
+                onClick={selectedUser.profile_picture_url ? () => setShowLightbox(true) : undefined}
+              />
+            </div>
+
+            {/* Stat Chips */}
+            <div className="grid grid-cols-3 gap-2.5">
+              <Link
+                href={`/dashboard/lighters?user_id=${selectedUser.user_id}`}
+                className="group relative overflow-hidden rounded-xl border border-accent/15 bg-gradient-to-br from-accent/12 to-accent/[0.03] p-3.5 hover:border-accent/30 transition-colors"
               >
-                {selectedUser.profile_picture_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selectedUser.profile_picture_url} alt="" className="w-20 h-20 rounded-full object-cover" />
-                ) : (
-                  <span className="text-2xl font-bold text-accent">
-                    {(selectedUser.full_name || selectedUser.username || '?')[0].toUpperCase()}
-                  </span>
-                )}
-              </div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-accent/15 flex items-center justify-center">
+                    <Flame className="w-3.5 h-3.5 text-accent" />
+                  </div>
+                </div>
+                <p className={`text-xl font-bold tracking-tight ${selectedUser.lightersOwned > 0 ? 'text-accent' : 'text-muted-foreground/70'}`}>
+                  {selectedUser.lightersOwned}
+                </p>
+                <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Lighters</p>
+              </Link>
+              <Link
+                href={`/dashboard/users/${selectedUser.user_id}/friends`}
+                className="group relative overflow-hidden rounded-xl border border-success/15 bg-gradient-to-br from-success/12 to-success/[0.03] p-3.5 hover:border-success/30 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-success/15 flex items-center justify-center">
+                    <Heart className="w-3.5 h-3.5 text-success" />
+                  </div>
+                </div>
+                <p className={`text-xl font-bold tracking-tight ${selectedUser.friendsCount > 0 ? 'text-success' : 'text-muted-foreground/70'}`}>
+                  {selectedUser.friendsCount}
+                </p>
+                <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Friends</p>
+              </Link>
+              <Link
+                href={`/dashboard/users/${selectedUser.user_id}/points`}
+                className="group relative overflow-hidden rounded-xl border border-warning/15 bg-gradient-to-br from-warning/12 to-warning/[0.03] p-3.5 hover:border-warning/30 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center">
+                    <Star className="w-3.5 h-3.5 text-warning" />
+                  </div>
+                </div>
+                <p className={`text-xl font-bold tracking-tight ${selectedUser.total_points > 0 ? 'text-warning' : 'text-muted-foreground/70'}`}>
+                  {formatNumber(selectedUser.total_points)}
+                </p>
+                <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Points</p>
+              </Link>
             </div>
 
-            {/* Clickable Stat Boxes */}
-            <div className="grid grid-cols-4 gap-3">
-              <Link href={`/dashboard/lighters?user_id=${selectedUser.user_id}`} className="bg-muted rounded-lg p-3 text-center hover:bg-card-hover transition-colors">
-                <Flame className="w-4 h-4 text-accent mx-auto mb-1" />
-                <p className="text-lg font-bold text-accent">{selectedUser.lightersOwned}</p>
-                <p className="text-xs text-muted-foreground">Lighters</p>
-              </Link>
-              <Link href={`/dashboard/users/${selectedUser.user_id}/posts`} className="bg-muted rounded-lg p-3 text-center hover:bg-card-hover transition-colors">
-                <FileText className="w-4 h-4 text-info mx-auto mb-1" />
-                <p className="text-lg font-bold text-info">{selectedUser.postsCount}</p>
-                <p className="text-xs text-muted-foreground">Posts</p>
-              </Link>
-              <Link href={`/dashboard/users/${selectedUser.user_id}/friends`} className="bg-muted rounded-lg p-3 text-center hover:bg-card-hover transition-colors">
-                <Heart className="w-4 h-4 text-success mx-auto mb-1" />
-                <p className="text-lg font-bold text-success">{selectedUser.friendsCount}</p>
-                <p className="text-xs text-muted-foreground">Friends</p>
-              </Link>
-              <Link href={`/dashboard/users/${selectedUser.user_id}/points`} className="bg-muted rounded-lg p-3 text-center hover:bg-card-hover transition-colors">
-                <Star className="w-4 h-4 text-warning mx-auto mb-1" />
-                <p className="text-lg font-bold text-warning">{formatNumber(selectedUser.total_points)}</p>
-                <p className="text-xs text-muted-foreground">Points</p>
-              </Link>
-            </div>
+            {/* Account */}
+            <section className="rounded-xl bg-muted/40 border border-border/60 p-4 space-y-3 text-sm">
+              <h3 className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">Account</h3>
+              <Row label="Email" value={<span className="text-foreground break-all">{selectedUser.email}</span>} />
+              <Row
+                label="Status"
+                value={
+                  <UserStatusPill
+                    value={selectedUser.user_status}
+                    onChange={(s) => handleStatusChange(selectedUser.user_id, s)}
+                  />
+                }
+              />
+              <Row label="Role" value={<span className="text-foreground">{formatEnum(selectedUser.user_level)}</span>} />
+              <Row
+                label="Email Verified"
+                value={(() => {
+                  const confirmedAt = authSignInMap[selectedUser.uuid]?.email_confirmed_at ?? selectedUser.email_verified_at;
+                  return confirmedAt
+                    ? <span className="text-success font-medium">{formatDate(confirmedAt)}</span>
+                    : <span className="text-muted-foreground">Not verified</span>;
+                })()}
+              />
+            </section>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Email</span>
-                <span className="text-foreground">{selectedUser.email}</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Status</span>
-                <select
-                  value={selectedUser.user_status}
-                  onChange={(e) => handleStatusChange(selectedUser.user_id, e.target.value)}
-                  className="px-2 py-1 bg-input border border-input-border rounded-lg text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-accent/50"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="suspended">Suspended</option>
-                  <option value="banned">Banned</option>
-                </select>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Role</span>
-                <span className="text-foreground capitalize">{selectedUser.user_level}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Points</span>
-                <span className="text-accent font-medium">{formatNumber(selectedUser.total_points)}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Gender</span>
-                <span className="text-foreground capitalize">{selectedUser.gender || '-'}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Joined</span>
-                <span className="text-foreground">{formatFullTimestamp(selectedUser.created_at)}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Last Login</span>
-                <span className="text-foreground">
-                  {(() => {
-                    const authDate = authSignInMap[selectedUser.uuid];
-                    const loginDate = isValidLoginDate(selectedUser.last_login_at) ? selectedUser.last_login_at : authDate;
-                    return isValidLoginDate(loginDate) ? timeAgo(loginDate!) : '-';
-                  })()}
-                </span>
-              </div>
-              <div className="flex justify-between py-2 border-b border-border/50">
-                <span className="text-muted-foreground">Email Verified</span>
-                <span className="text-foreground">
-                  {selectedUser.email_verified_at ? formatDate(selectedUser.email_verified_at) : 'No'}
-                </span>
-              </div>
+            {/* Profile */}
+            <section className="rounded-xl bg-muted/40 border border-border/60 p-4 space-y-3 text-sm">
+              <h3 className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">Profile</h3>
+              <Row label="Gender" value={<span className="text-foreground">{formatEnum(selectedUser.gender)}</span>} />
+              <Row label="Points" value={<span className="text-accent font-semibold tabular-nums">{formatNumber(selectedUser.total_points)}</span>} />
               {selectedUser.bio && (
-                <div className="py-2">
-                  <span className="text-muted-foreground block mb-1">Bio</span>
-                  <span className="text-foreground">{selectedUser.bio}</span>
+                <div className="pt-1 border-t border-border/40">
+                  <p className="text-muted-foreground text-xs mb-1">Bio</p>
+                  <p className="text-foreground leading-relaxed">{selectedUser.bio}</p>
                 </div>
               )}
-            </div>
+            </section>
+
+            {/* Activity */}
+            <section className="rounded-xl bg-muted/40 border border-border/60 p-4 space-y-3 text-sm">
+              <h3 className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-[0.12em]">Activity</h3>
+              <Row
+                label="Joined"
+                value={
+                  <span className="text-foreground" title={formatFullTimestamp(selectedUser.created_at)}>
+                    {formatDate(selectedUser.created_at)}
+                  </span>
+                }
+              />
+              <Row
+                label="Last Login"
+                value={(() => {
+                  const authDate = authSignInMap[selectedUser.uuid]?.last_sign_in_at;
+                  const loginDate = isValidLoginDate(selectedUser.last_login_at) ? selectedUser.last_login_at : authDate;
+                  return isValidLoginDate(loginDate)
+                    ? <span className="text-foreground" title={formatFullTimestamp(loginDate!)}>{timeAgo(loginDate!)}</span>
+                    : <span className="text-muted-foreground">Never</span>;
+                })()}
+              />
+            </section>
 
             {/* Reports & Blocks */}
             {(userReports.length > 0 || userBlocks.length > 0) && (
@@ -754,6 +768,23 @@ export default function UsersPage() {
                 )}
               </div>
             )}
+
+            {/* Danger Zone */}
+            <section className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 mt-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-xs font-semibold text-destructive">Delete this user</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Permanently removes the account and all related data. This cannot be undone.</p>
+                </div>
+                <button
+                  onClick={() => selectedUser && setDeleteTarget(selectedUser)}
+                  className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-destructive bg-destructive/10 hover:bg-destructive/20 border border-destructive/20 rounded-lg transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </div>
+            </section>
           </div>
         ) : null}
       </Modal>
