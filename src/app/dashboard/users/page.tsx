@@ -46,6 +46,7 @@ interface User {
   user_status: string;
   total_points: number;
   last_login_at: string;
+  last_seen_at: string;
   email_verified_at: string;
   created_at: string;
 }
@@ -182,7 +183,7 @@ export default function UsersPage() {
     const filter = searchParams.get('filter');
     let query = supabase
       .from('users')
-      .select('user_id, uuid, full_name, username, email, gender, profile_picture_url, user_level, user_status, total_points, last_login_at, email_verified_at, created_at', { count: 'exact' })
+      .select('user_id, uuid, full_name, username, email, gender, profile_picture_url, user_level, user_status, total_points, last_login_at, last_seen_at, email_verified_at, created_at', { count: 'exact' })
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
@@ -419,14 +420,21 @@ export default function UsersPage() {
       render: (user: User) => <span className="text-muted-foreground text-xs">{formatDate(user.created_at)}</span>,
     },
     {
-      key: 'last_login_at',
+      key: 'last_seen_at',
       label: 'Last Active',
       render: (user: User) => {
         const authDate = authSignInMap[user.uuid]?.last_sign_in_at;
-        const loginDate = isValidLoginDate(user.last_login_at) ? user.last_login_at : authDate;
+        // Prefer the presence heartbeat (last_seen_at — updated every 60s while the
+        // app is open): the real "last active" signal. Fall back to last_login_at,
+        // then to the auth provider's last_sign_in_at (only moves on explicit login).
+        const activeDate = isValidLoginDate(user.last_seen_at)
+          ? user.last_seen_at
+          : isValidLoginDate(user.last_login_at)
+            ? user.last_login_at
+            : authDate;
         return (
           <span className="text-muted-foreground text-xs">
-            {isValidLoginDate(loginDate) ? timeAgo(loginDate!) : '-'}
+            {isValidLoginDate(activeDate) ? timeAgo(activeDate!) : '-'}
           </span>
         );
       },
@@ -701,12 +709,16 @@ export default function UsersPage() {
                 }
               />
               <Row
-                label="Last Login"
+                label="Last Active"
                 value={(() => {
                   const authDate = authSignInMap[selectedUser.uuid]?.last_sign_in_at;
-                  const loginDate = isValidLoginDate(selectedUser.last_login_at) ? selectedUser.last_login_at : authDate;
-                  return isValidLoginDate(loginDate)
-                    ? <span className="text-foreground" title={formatFullTimestamp(loginDate!)}>{timeAgo(loginDate!)}</span>
+                  const activeDate = isValidLoginDate(selectedUser.last_seen_at)
+                    ? selectedUser.last_seen_at
+                    : isValidLoginDate(selectedUser.last_login_at)
+                      ? selectedUser.last_login_at
+                      : authDate;
+                  return isValidLoginDate(activeDate)
+                    ? <span className="text-foreground" title={formatFullTimestamp(activeDate!)}>{timeAgo(activeDate!)}</span>
                     : <span className="text-muted-foreground">Never</span>;
                 })()}
               />
